@@ -111,6 +111,11 @@
   .btn.danger{color:#b91c1c; border-color:#fecaca;}
   .btn.danger:hover{background:#fef2f2;}
   .btn.icon{padding:4px 8px; font-size:.95rem; line-height:1;}
+  .lock-btn{transition:background .2s, border-color .2s;}
+  .lock-btn.locked{background:#fee2e2; border-color:#fca5a5; color:#dc2626;}
+  .lock-btn.locked:hover{background:#fecaca;}
+  .lock-btn.unlocked{background:#dcfce7; border-color:#86efac; color:#16a34a;}
+  .lock-btn.unlocked:hover{background:#bbf7d0;}
 
   @media(max-width:480px){
     header h1{font-size:1.25rem;}
@@ -138,6 +143,7 @@
         <div class="card-head">
           <h2>計數網格</h2>
           <span class="tools">
+            <button class="btn icon lock-btn locked" id="lockBtn" title="解鎖平移縮放">🔒</button>
             <button class="btn icon" id="zoomIn" title="放大">＋</button>
             <button class="btn icon" id="zoomOut" title="縮小">－</button>
             <button class="btn icon" id="zoomReset" title="重設視圖">⟲</button>
@@ -153,7 +159,7 @@
             <g id="cross" pointer-events="none"></g>
           </svg>
         </div>
-        <p class="note">點方格→輸入該格孢子數→確定。支援雙指縮放與拖曳平移。</p>
+        <p class="note">點方格→輸入孢子數→確定。預設鎖定畫面，按 🔒 解鎖後可雙指縮放與拖曳平移。</p>
       </div>
     </section>
 
@@ -446,9 +452,10 @@
     zoomAt(p.x,p.y, e.deltaY<0?1.15:1/1.15);
   },{passive:false});
 
-  // ── 觸控：拖曳 + 雙指縮放 ──
+  // ── 觸控：拖曳 + 雙指縮放（受鎖定控制）──
   var panning=false, startX=0, startY=0, sv=null;
   var lastPinchDist=0;
+  var panLocked=true;  // 預設鎖定
 
   function getTouchDist(e){
     var t=e.touches;
@@ -460,6 +467,7 @@
   }
 
   svg.addEventListener("touchstart",function(e){
+    if(panLocked) return;  // 鎖定時不處理
     if(e.touches.length===2){
       e.preventDefault();
       pinching=true; didPan=true;
@@ -473,6 +481,7 @@
   },{passive:false});
 
   svg.addEventListener("touchmove",function(e){
+    if(panLocked) return;  // 鎖定時不處理
     e.preventDefault();
     if(pinching && e.touches.length===2){
       var dist=getTouchDist(e);
@@ -522,7 +531,7 @@
   });
 
   document.getElementById("svgBox").addEventListener("touchmove",function(e){
-    e.preventDefault();
+    if(!panLocked) e.preventDefault();  // 解鎖時才阻止頁面捲動
   },{passive:false});
 
   // ── 初始化 ──
@@ -545,6 +554,16 @@
     document.getElementById("clearBtn").addEventListener("click",function(){
       if(!confirm("確定要清除所有計數嗎？")) return;
       state.counts={}; closePopup(); renderCells(); recalc();
+    });
+
+    // 鎖定 / 解鎖按鈕
+    var lockBtn=document.getElementById("lockBtn");
+    lockBtn.addEventListener("click",function(){
+      panLocked=!panLocked;
+      lockBtn.textContent=panLocked?"🔒":"🔓";
+      lockBtn.title=panLocked?"解鎖平移縮放":"鎖定平移縮放";
+      lockBtn.classList.toggle("locked",panLocked);
+      lockBtn.classList.toggle("unlocked",!panLocked);
     });
 
     renderStatic();
