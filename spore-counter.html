@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>孢子計數器</title>
+
+<!-- PWA / iOS 加入主畫面 -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="孢子計數" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#f8fafc" />
+
+<style>
+  :root{
+    --grid-bg:#ffffff; --grid-fine:#9aa3a0; --grid-corner:#6b756f;
+    --grid-med:#3f4a44; --grid-major:#1f2620;
+    --bg:#f8fafc; --card:#ffffff; --border:#e2e8f0;
+    --ink:#1e293b; --muted:#64748b; --faint:#94a3b8;
+    --blue:#2563eb;
+    --safe-b:env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{overscroll-behavior:none;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Helvetica Neue",Arial,"Microsoft JhengHei",sans-serif;
+    padding:24px 16px; padding-bottom:calc(24px + var(--safe-b));
+    overflow-x:hidden;
+  }
+  .wrap{max-width:1100px; margin:0 auto;}
+  header h1{font-size:1.5rem; font-weight:700; color:#0f172a; margin:0 0 4px;}
+  header p{font-size:.875rem; color:var(--muted); margin:0;}
+  .layout{display:grid; grid-template-columns:1fr; gap:24px; margin-top:20px;}
+  @media(min-width:1024px){ .layout{grid-template-columns:1fr 1fr;} }
+  .card{background:var(--card); border:1px solid var(--border); border-radius:16px;
+        box-shadow:0 1px 2px rgba(0,0,0,.04); padding:20px;}
+  .card.grid-card{padding:16px;}
+  .card-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap;}
+  .card-head h2{font-size:1rem; font-weight:600; color:#334155; margin:0;}
+  .tools{display:flex; align-items:center; gap:6px; font-size:.75rem; color:var(--muted); flex-wrap:wrap;}
+  .note{font-size:.75rem; color:var(--faint); margin:8px 0 0;}
+
+  .svg-box{position:relative; width:100%; aspect-ratio:1/1; overflow:hidden; border-radius:8px;
+           touch-action:none;}
+  svg{width:100%; height:100%; user-select:none; display:block; touch-action:none; cursor:grab;}
+  svg:active{cursor:grabbing;}
+  rect.cell{cursor:crosshair;}
+  rect.cell:hover{fill:#3b82f6; fill-opacity:.30; stroke:#2563eb; stroke-width:.6;}
+  #cross line{stroke:#ef4444; stroke-width:1; vector-effect:non-scaling-stroke; stroke-dasharray:4 3;}
+
+  /* 彈窗：桌面版浮動、手機版底部 sheet */
+  .popup-overlay{position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.3);
+                  display:none; align-items:flex-end; justify-content:center;}
+  .popup-overlay.show{display:flex;}
+  .popup{background:#fff; border-radius:16px 16px 0 0; padding:20px 20px calc(20px + var(--safe-b));
+         width:100%; max-width:400px;
+         box-shadow:0 -4px 24px rgba(0,0,0,.15);}
+  .popup .handle{width:36px; height:4px; background:#cbd5e1; border-radius:2px;
+                 margin:0 auto 14px;}
+  .popup h4{margin:0 0 10px; font-size:.95rem; color:#334155; font-weight:600;}
+  .popup input[type="number"]{width:100%; border:1px solid #cbd5e1; border-radius:10px; padding:12px 14px;
+               font-size:1.1rem; font-family:inherit; text-align:center;
+               -moz-appearance:textfield;}
+  .popup input::-webkit-outer-spin-button,
+  .popup input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .popup .row{display:flex; gap:8px; margin-top:12px;}
+  .popup .row .btn{flex:1; padding:10px 12px; font-size:.9rem;}
+
+  @media(min-width:768px){
+    .popup-overlay{align-items:center;}
+    .popup{border-radius:16px; max-width:280px; padding:16px 18px;
+           box-shadow:0 8px 24px rgba(0,0,0,.18);}
+    .popup .handle{display:none;}
+    .popup input[type="number"]{padding:8px 12px; font-size:.95rem;}
+    .popup .row .btn{padding:7px 10px; font-size:.8rem;}
+  }
+
+  .stack{display:flex; flex-direction:column; gap:16px;}
+  .res-label{font-size:.875rem; color:var(--muted); margin-bottom:4px;}
+  .res-main{font-size:2.25rem; font-weight:800; color:#0f172a;
+            font-variant-numeric:tabular-nums; word-break:break-all; line-height:1.1;}
+  .res-main .unit{font-size:1rem; font-weight:500; color:var(--faint); margin-left:8px;}
+  .res-sci{margin-top:8px; font-size:1.125rem; font-weight:600; color:var(--blue);
+           font-variant-numeric:tabular-nums;}
+  .res-sci .unit{font-size:.875rem; color:var(--faint);}
+  .sub-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px;}
+  .sub{background:#f8fafc; border-radius:8px; padding:8px 12px; font-size:.75rem; color:var(--muted);}
+  .sub b{color:#0f172a; font-weight:700; font-variant-numeric:tabular-nums;}
+
+  label.field{display:block;}
+  label.field > span{display:block; font-size:.875rem; font-weight:500; color:#475569; margin-bottom:4px;}
+  input,select{width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px;
+               font-size:.875rem; font-family:inherit; background:#fff; color:var(--ink);
+               font-variant-numeric:tabular-nums;}
+  input:focus,select:focus{outline:none; border-color:var(--blue); box-shadow:0 0 0 2px rgba(96,165,250,.5);}
+  .fields{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .formula{font-size:.75rem; color:var(--faint); line-height:1.6; margin-top:4px;}
+  .btn{appearance:none; border:1px solid #cbd5e1; background:#fff; color:#475569;
+       font-size:.8rem; border-radius:8px; padding:5px 10px; cursor:pointer; font-family:inherit;
+       min-height:36px; min-width:36px; display:inline-flex; align-items:center; justify-content:center;}
+  .btn:hover{background:#f1f5f9;}
+  .btn:active{background:#e2e8f0; transform:scale(.96);}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff;}
+  .btn.primary:hover{background:#1d4ed8;}
+  .btn.primary:active{background:#1e40af;}
+  .btn.danger{color:#b91c1c; border-color:#fecaca;}
+  .btn.danger:hover{background:#fef2f2;}
+  .btn.icon{padding:4px 8px; font-size:.95rem; line-height:1;}
+
+  /* 手機上工具列改善 */
+  @media(max-width:480px){
+    header h1{font-size:1.25rem;}
+    .tools{gap:4px;}
+    .tools .btn{font-size:.7rem; padding:4px 7px; min-height:32px;}
+    .res-main{font-size:1.75rem;}
+  }
+
+  /* 觸控提示動畫 */
+  .cell-flash{animation:cellFlash .3s ease-out;}
+  @keyframes cellFlash{
+    0%{fill-opacity:.6;} 100%{fill-opacity:.28;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>血球計數器孢子濃度即時計算工具</h1>
+    <p>Neubauer improved · 即時換算原液濃度（個/mL）</p>
+  </header>
+
+  <div class="layout">
+    <!-- 左：互動網格 -->
+    <section class="card grid-card">
+      <div class="card-head">
+        <h2>計數網格</h2>
+        <span class="tools">
+          <button class="btn icon" id="zoomIn" title="放大">＋</button>
+          <button class="btn icon" id="zoomOut" title="縮小">－</button>
+          <button class="btn icon" id="zoomReset" title="重設視圖">⟲</button>
+          <button class="btn" id="csvBtn">匯出 CSV</button>
+          <button class="btn" id="importBtn">匯入 CSV</button>
+          <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none">
+          <button class="btn" id="clearBtn">清除全部</button>
+        </span>
+      </div>
+      <div class="svg-box" id="svgBox">
+        <svg id="svg" xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 324 324">
+          <rect x="-12" y="-12" width="324" height="324" fill="var(--grid-bg)"/>
+          <g id="static"></g>
+          <g id="cells"></g>
+          <g id="labels"></g>
+          <g id="cross" pointer-events="none"></g>
+        </svg>
+      </div>
+      <p class="note">點方格→輸入該格孢子數→確定。支援雙指縮放與拖曳平移。</p>
+    </section>
+
+    <!-- 右：結果 + 輸入 -->
+    <section class="stack">
+      <div class="card">
+        <div class="res-label">原液濃度</div>
+        <div class="res-main"><span id="resMain">—</span><span class="unit">個/mL</span></div>
+        <div class="res-sci"><span id="resSci">—</span> <span class="unit">個/mL</span></div>
+        <div class="sub-grid">
+          <div class="sub">計數格數：<b id="resCells">0</b> 格</div>
+          <div class="sub">孢子總數：<b id="resTotal">0</b> 顆</div>
+          <div class="sub">單格體積：<b id="resVol">—</b> mm³</div>
+          <div class="sub">平均每格：<b id="resAvg">—</b> 顆</div>
+        </div>
+      </div>
+
+      <div class="card stack">
+        <label class="field">
+          <span>計數層級</span>
+          <select id="level"></select>
+        </label>
+
+        <div class="fields">
+          <label class="field"><span>稀釋倍數</span>
+            <input type="number" id="dilution" min="0" step="any" value="1" inputmode="decimal"></label>
+          <label class="field"><span>計數槽深度 (mm)</span>
+            <input type="number" id="depth" min="0" step="any" value="0.1" inputmode="decimal"></label>
+        </div>
+
+        <div class="formula">
+          濃度 = 平均每格顆數 ÷（單格面積 × 深度）× 1000 × 稀釋倍數<br>
+          平均每格 = 孢子總數 ÷ 計數格數　（1 mL = 1000 mm³）
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- 彈窗：獨立 overlay -->
+<div class="popup-overlay" id="popupOverlay">
+  <div class="popup" id="popup">
+    <div class="handle"></div>
+    <h4 id="popupTitle">此格孢子數量</h4>
+    <input type="number" id="popupInput" min="0" step="1" inputmode="numeric" />
+    <div class="row">
+      <button class="btn primary" id="popupOk">確定</button>
+      <button class="btn" id="popupCancel">取消</button>
+    </div>
+    <div class="row">
+      <button class="btn danger" id="popupRemove">移除此格</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── PWA：動態產生 manifest + apple-touch-icon ──
+  (function setupPWA(){
+    // 產生 app icon（canvas 繪製一個簡易網格圖示）
+    try{
+      var c=document.createElement("canvas"); c.width=180; c.height=180;
+      var ctx=c.getContext("2d");
+      // 背景
+      ctx.fillStyle="#e0f2fe"; ctx.beginPath();
+      ctx.roundRect(0,0,180,180,28); ctx.fill();
+      // 網格
+      ctx.strokeStyle="#2563eb"; ctx.lineWidth=2.5;
+      var m=30, s=(180-2*m)/4;
+      for(var i=0;i<=4;i++){
+        ctx.beginPath(); ctx.moveTo(m+i*s,m); ctx.lineTo(m+i*s,150); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(m,m+i*s); ctx.lineTo(150,m+i*s); ctx.stroke();
+      }
+      // 幾個點代表孢子
+      ctx.fillStyle="#2563eb";
+      [[1,0],[2,1],[0,2],[3,3],[1,3]].forEach(function(p){
+        ctx.beginPath(); ctx.arc(m+p[0]*s+s/2, m+p[1]*s+s/2, 7, 0, Math.PI*2); ctx.fill();
+      });
+      var iconURL=c.toDataURL("image/png");
+      var link=document.createElement("link");
+      link.rel="apple-touch-icon"; link.href=iconURL;
+      document.head.appendChild(link);
+
+      // manifest
+      var manifest={
+        name:"血球計數器孢子濃度計算工具",
+        short_name:"孢子計數",
+        start_url:location.href,
+        display:"standalone",
+        background_color:"#f8fafc",
+        theme_color:"#f8fafc",
+        icons:[{src:iconURL, sizes:"180x180", type:"image/png"}]
+      };
+      var blob=new Blob([JSON.stringify(manifest)],{type:"application/json"});
+      var mLink=document.createElement("link");
+      mLink.rel="manifest"; mLink.href=URL.createObjectURL(blob);
+      document.head.appendChild(mLink);
+    }catch(e){/* 非關鍵，靜默失敗 */}
+  })();
+
+  // ── 計數層級（面積 mm²；SVG 1 mm = 100 單位）──
+  var LEVELS = {
+    smallest:    {label:"最小方格（1/400 mm²，0.05×0.05）", area:1/400},
+    medium:      {label:"中方格（1/25 mm²，0.20×0.20）",   area:1/25},
+    cornerSmall: {label:"角落大格的小格（1/16 mm²，0.25×0.25）", area:1/16},
+    large:       {label:"大格（1 mm²）", area:1}
+  };
+  var CORNERS = [[0,0],[200,0],[0,200],[200,200]];
+
+  function buildCells(key){
+    var cells=[], r, c;
+    if(key==="large"){
+      cells.push({id:"L-c",x:100,y:100,w:100,h:100});
+      CORNERS.forEach(function(p,i){cells.push({id:"L-"+i,x:p[0],y:p[1],w:100,h:100});});
+    }else if(key==="medium"){
+      for(r=0;r<5;r++)for(c=0;c<5;c++)
+        cells.push({id:"M-"+r+"-"+c,x:100+c*20,y:100+r*20,w:20,h:20});
+    }else if(key==="cornerSmall"){
+      CORNERS.forEach(function(o,k){
+        for(r=0;r<4;r++)for(c=0;c<4;c++)
+          cells.push({id:"C-"+k+"-"+r+"-"+c,x:o[0]+c*25,y:o[1]+r*25,w:25,h:25});
+      });
+    }else{
+      for(r=0;r<20;r++)for(c=0;c<20;c++)
+        cells.push({id:"S-"+r+"-"+c,x:100+c*5,y:100+r*5,w:5,h:5});
+    }
+    return cells;
+  }
+
+  // ── 數字格式 ──
+  var SUP={"-":"⁻","0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹"};
+  function toSuper(n){return String(n).split("").map(function(ch){return SUP[ch]||ch;}).join("");}
+  function sci(v){
+    if(!isFinite(v)||v<=0)return "—";
+    var exp=Math.floor(Math.log10(v));
+    var m=Math.round(v/Math.pow(10,exp)*100)/100;
+    return m+" × 10"+toSuper(exp);
+  }
+  function commas(v){
+    if(!isFinite(v)||v<=0)return "—";
+    return Math.round(v).toLocaleString("en-US");
+  }
+
+  // ── SVG 助手 ──
+  var NS="http://www.w3.org/2000/svg";
+  function line(x1,y1,x2,y2){
+    var l=document.createElementNS(NS,"line");
+    l.setAttribute("x1",x1);l.setAttribute("y1",y1);
+    l.setAttribute("x2",x2);l.setAttribute("y2",y2);
+    return l;
+  }
+  function rect(x,y,w,h){
+    var r=document.createElementNS(NS,"rect");
+    r.setAttribute("x",x);r.setAttribute("y",y);
+    r.setAttribute("width",w);r.setAttribute("height",h);
+    return r;
+  }
+  function group(stroke,sw){
+    var g=document.createElementNS(NS,"g");
+    g.setAttribute("stroke",stroke);g.setAttribute("stroke-width",sw);
+    g.setAttribute("stroke-linecap","square");
+    return g;
+  }
+
+  // ── 畫靜態格線（只畫一次）──
+  function renderStatic(){
+    var s=document.getElementById("static");
+    s.textContent="";
+    var i,p;
+    var gf=group("var(--grid-fine)",0.4);
+    for(i=0;i<=20;i++){p=100+i*5;gf.appendChild(line(0,p,300,p));gf.appendChild(line(p,0,p,300));}
+    s.appendChild(gf);
+    var gc=group("var(--grid-corner)",0.6);
+    CORNERS.forEach(function(o){
+      [25,50,75].forEach(function(d){
+        gc.appendChild(line(o[0]+d,o[1],o[0]+d,o[1]+100));
+        gc.appendChild(line(o[0],o[1]+d,o[0]+100,o[1]+d));
+      });
+    });
+    s.appendChild(gc);
+    var gm=group("var(--grid-med)",0.9);
+    for(i=0;i<=5;i++){p=100+i*20;gm.appendChild(line(p,100,p,200));gm.appendChild(line(100,p,200,p));}
+    s.appendChild(gm);
+    var gM=group("var(--grid-major)",1.6);
+    [0,100,200,300].forEach(function(p){gM.appendChild(line(p,0,p,300));gM.appendChild(line(0,p,300,p));});
+    s.appendChild(gM);
+  }
+
+  // ── 狀態 ──
+  var state={level:"medium", dilution:1, depth:0.1, counts:{}};
+  function countedIds(){return Object.keys(state.counts);}
+  function totalSpores(){
+    return countedIds().reduce(function(a,id){return a+(Number(state.counts[id])||0);},0);
+  }
+
+  // ── 畫可點格子 + 數字標籤 ──
+  var didPan=false;
+  function renderCells(){
+    var box=document.getElementById("cells");
+    var lab=document.getElementById("labels");
+    box.textContent=""; lab.textContent="";
+    buildCells(state.level).forEach(function(cell){
+      var has=Object.prototype.hasOwnProperty.call(state.counts,cell.id);
+      var r=rect(cell.x,cell.y,cell.w,cell.h);
+      r.setAttribute("class","cell");
+      r.setAttribute("fill", has?"#3b82f6":"transparent");
+      r.setAttribute("fill-opacity", has?"0.28":"0");
+      r.setAttribute("stroke", has?"#2563eb":"transparent");
+      r.setAttribute("stroke-width", has?"0.6":"0");
+
+      // 觸控：用 pointerup 代替 click，避免拖曳誤觸
+      r.addEventListener("pointerup",function(ev){
+        if(didPan) return;
+        if(pinching) return;
+        ev.stopPropagation();
+        openPopup(cell);
+      });
+      r.addEventListener("mouseenter",function(){ showCross(cell.x+cell.w/2, cell.y+cell.h/2); });
+      r.addEventListener("mouseleave",hideCross);
+      box.appendChild(r);
+      if(has){
+        var t=document.createElementNS(NS,"text");
+        t.setAttribute("x", cell.x+cell.w/2);
+        t.setAttribute("y", cell.y+cell.h/2);
+        t.setAttribute("text-anchor","middle");
+        t.setAttribute("dominant-baseline","central");
+        t.setAttribute("fill","#1d4ed8");
+        t.setAttribute("font-weight","700");
+        t.setAttribute("font-size", Math.min(8, Math.min(cell.w,cell.h)*0.5));
+        t.setAttribute("pointer-events","none");
+        t.textContent=state.counts[cell.id];
+        lab.appendChild(t);
+      }
+    });
+  }
+
+  // ── 十字準心（hover 對位用）──
+  function showCross(cx,cy){
+    var g=document.getElementById("cross");
+    g.textContent="";
+    g.appendChild(line(-120,cy,420,cy));
+    g.appendChild(line(cx,-120,cx,420));
+  }
+  function hideCross(){ document.getElementById("cross").textContent=""; }
+
+  // ── 彈窗（底部 sheet 模式）──
+  var overlay=document.getElementById("popupOverlay");
+  var popupInput=document.getElementById("popupInput");
+  var popupTitle=document.getElementById("popupTitle");
+  var activeId=null;
+
+  function openPopup(cell){
+    activeId=cell.id;
+    var has=Object.prototype.hasOwnProperty.call(state.counts,cell.id);
+    popupTitle.textContent = has ? ("此格孢子數量（目前 "+state.counts[cell.id]+"）") : "此格孢子數量";
+    popupInput.value = has ? state.counts[cell.id] : "";
+    overlay.classList.add("show");
+    setTimeout(function(){ popupInput.focus(); popupInput.select(); },80);
+  }
+  function closePopup(){ overlay.classList.remove("show"); activeId=null; }
+  function confirmPopup(){
+    if(activeId==null) return;
+    var v=popupInput.value===""?0:Number(popupInput.value);
+    if(isFinite(v) && v>0){ state.counts[activeId]=v; }
+    else { delete state.counts[activeId]; }
+    closePopup(); renderCells(); recalc();
+  }
+  function removePopup(){
+    if(activeId!=null){ delete state.counts[activeId]; }
+    closePopup(); renderCells(); recalc();
+  }
+  document.getElementById("popupOk").addEventListener("click",confirmPopup);
+  document.getElementById("popupCancel").addEventListener("click",closePopup);
+  document.getElementById("popupRemove").addEventListener("click",removePopup);
+  popupInput.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){e.preventDefault();confirmPopup();}
+    else if(e.key==="Escape"){e.preventDefault();closePopup();}
+  });
+  // 點 overlay 背景關閉
+  overlay.addEventListener("click",function(e){
+    if(e.target===overlay) closePopup();
+  });
+
+  // ── 計算 + 更新結果 ──
+  function recalc(){
+    var area=LEVELS[state.level].area;
+    var vol=area*state.depth;
+    var n=countedIds().length;
+    var total=totalSpores();
+    var avg=n>0 ? total/n : 0;
+    var conc=(vol>0&&n>0) ? (avg/vol)*1000*(Number(state.dilution)||0) : 0;
+
+    document.getElementById("resMain").textContent=commas(conc);
+    document.getElementById("resSci").textContent=sci(conc);
+    document.getElementById("resCells").textContent=n;
+    document.getElementById("resTotal").textContent=total;
+    document.getElementById("resVol").textContent=vol?vol.toPrecision(3):"—";
+    document.getElementById("resAvg").textContent=n?avg.toFixed(2):"—";
+  }
+
+  // ── 匯出 CSV ──
+  function csvCell(s){ return '"'+String(s).replace(/"/g,'""')+'"'; }
+  function pad(n){ return (n<10?"0":"")+n; }
+  function exportCSV(){
+    var lv=LEVELS[state.level];
+    var vol=lv.area*state.depth;
+    var n=countedIds().length;
+    var total=totalSpores();
+    var avg=n>0 ? total/n : 0;
+    var conc=(vol>0&&n>0) ? (avg/vol)*1000*(Number(state.dilution)||0) : 0;
+
+    var rows=[];
+    rows.push(["項目","數值"]);
+    rows.push(["計數層級", lv.label]);
+    rows.push(["單格面積 (mm^2)", lv.area]);
+    rows.push(["計數槽深度 (mm)", state.depth]);
+    rows.push(["稀釋倍數", state.dilution]);
+    rows.push(["單格體積 (mm^3)", vol]);
+    rows.push(["計數格數", n]);
+    rows.push(["孢子總數", total]);
+    rows.push(["平均每格 (顆)", n? Number(avg.toFixed(4)) : 0]);
+    rows.push(["濃度 (個/mL)", n? Math.round(conc) : 0]);
+    rows.push(["濃度 (科學記號)", sci(conc)]);
+    rows.push([]);
+    rows.push(["格子編號","SVG_X","SVG_Y","該格孢子數"]);
+    buildCells(state.level).forEach(function(cell){
+      if(Object.prototype.hasOwnProperty.call(state.counts,cell.id)){
+        rows.push([cell.id, cell.x, cell.y, state.counts[cell.id]]);
+      }
+    });
+
+    var prefix=window.prompt("請輸入檔名前綴：", "spore_count");
+    if(prefix===null) return;
+    prefix=prefix.trim();
+    if(prefix==="") prefix="spore_count";
+    prefix=prefix.replace(/[\\\/:*?"<>|]/g,"_");
+
+    var csv=rows.map(function(r){ return r.map(csvCell).join(","); }).join("\r\n");
+    var blob=new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
+    var d=new Date();
+    var name=prefix+"_"+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+
+             "_"+pad(d.getHours())+pad(d.getMinutes())+".csv";
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  // ── 匯入 CSV ──
+  function parseCSV(text){
+    text=text.replace(/^\uFEFF/,"");
+    var rows=[],cur=[],field="",i=0,inQ=false,ch;
+    while(i<text.length){
+      ch=text[i];
+      if(inQ){
+        if(ch==='"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} inQ=false;i++;continue; }
+        field+=ch;i++;continue;
+      }
+      if(ch==='"'){ inQ=true;i++;continue; }
+      if(ch===','){ cur.push(field);field="";i++;continue; }
+      if(ch==='\r'){ i++;continue; }
+      if(ch==='\n'){ cur.push(field);rows.push(cur);cur=[];field="";i++;continue; }
+      field+=ch;i++;
+    }
+    cur.push(field);rows.push(cur);
+    return rows;
+  }
+  function importCSV(file){
+    var reader=new FileReader();
+    reader.onload=function(){
+      try{
+        var rows=parseCSV(String(reader.result));
+        var levelKey=null, depth=null, dil=null, counts={}, inDetail=false, found=0;
+        rows.forEach(function(r){
+          var k=(r[0]||"").trim();
+          if(!inDetail){
+            if(k==="計數層級"){
+              var lbl=(r[1]||"").trim();
+              Object.keys(LEVELS).forEach(function(key){ if(LEVELS[key].label===lbl) levelKey=key; });
+            } else if(k.indexOf("計數槽深度")===0){ depth=Number(r[1]); }
+            else if(k==="稀釋倍數"){ dil=Number(r[1]); }
+            else if(k==="格子編號"){ inDetail=true; }
+          } else {
+            var id=k;
+            if(!id) return;
+            var cnt=Number(r[3]);
+            if(isFinite(cnt) && cnt>0){ counts[id]=cnt; found++; }
+          }
+        });
+        if(!levelKey){
+          var ids=Object.keys(counts);
+          if(ids.length){
+            var p=ids[0].charAt(0);
+            levelKey = p==="L"?"large" : p==="M"?"medium" : p==="C"?"cornerSmall" : "smallest";
+          }
+        }
+        if(!levelKey && found===0){ alert("這個 CSV 找不到可匯入的計數資料。"); return; }
+        if(levelKey){ state.level=levelKey; document.getElementById("level").value=levelKey; }
+        if(depth!=null && isFinite(depth)){ state.depth=depth; document.getElementById("depth").value=depth; }
+        if(dil!=null && isFinite(dil)){ state.dilution=dil; document.getElementById("dilution").value=dil; }
+        state.counts=counts;
+        closePopup();
+        if(state.level==="smallest") setView({x:95,y:95,w:110,h:110}); else setView(BASE);
+        renderCells(); recalc();
+      }catch(err){
+        alert("CSV 匯入失敗："+(err && err.message ? err.message : err));
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ── 縮放 / 平移 ──
+  var svg=document.getElementById("svg");
+  var BASE={x:-12,y:-12,w:324,h:324};
+  var v={x:-12,y:-12,w:324,h:324};
+  function applyView(){ svg.setAttribute("viewBox", v.x+" "+v.y+" "+v.w+" "+v.h); }
+  function setView(nv){ v.x=nv.x; v.y=nv.y; v.w=nv.w; v.h=nv.h; applyView(); }
+  function clientToView(cx,cy){
+    var r=svg.getBoundingClientRect();
+    return { x:v.x+(cx-r.left)/r.width*v.w, y:v.y+(cy-r.top)/r.height*v.h };
+  }
+  function clampView(){
+    // 限制不要拖出邊界太多
+    var pad=v.w*0.3;
+    v.x=Math.max(-12-pad, Math.min(300-v.w+pad+12, v.x));
+    v.y=Math.max(-12-pad, Math.min(300-v.h+pad+12, v.y));
+  }
+  function zoomAt(cx,cy,factor){
+    var nw=v.w/factor; nw=Math.min(324,Math.max(12,nw));
+    var rx=(cx-v.x)/v.w, ry=(cy-v.y)/v.h;
+    v.x=cx-rx*nw; v.y=cy-ry*nw; v.w=nw; v.h=nw;
+    clampView(); applyView();
+  }
+  document.getElementById("zoomIn").addEventListener("click",function(){zoomAt(v.x+v.w/2,v.y+v.h/2,1.4);});
+  document.getElementById("zoomOut").addEventListener("click",function(){zoomAt(v.x+v.w/2,v.y+v.h/2,1/1.4);});
+  document.getElementById("zoomReset").addEventListener("click",function(){setView(BASE);});
+
+  // 滑鼠滾輪縮放
+  svg.addEventListener("wheel",function(e){
+    e.preventDefault();
+    var p=clientToView(e.clientX,e.clientY);
+    zoomAt(p.x,p.y, e.deltaY<0?1.15:1/1.15);
+  },{passive:false});
+
+  // ── 觸控：拖曳平移 + 雙指縮放 ──
+  var panning=false, startX=0, startY=0, sv=null;
+  var pinching=false, lastPinchDist=0;
+
+  function getTouchDist(e){
+    var t=e.touches;
+    return Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY);
+  }
+  function getTouchCenter(e){
+    var t=e.touches;
+    return {x:(t[0].clientX+t[1].clientX)/2, y:(t[0].clientY+t[1].clientY)/2};
+  }
+
+  svg.addEventListener("touchstart",function(e){
+    if(e.touches.length===2){
+      e.preventDefault();
+      pinching=true; didPan=true;
+      lastPinchDist=getTouchDist(e);
+      sv={x:v.x,y:v.y,w:v.w,h:v.h};
+    } else if(e.touches.length===1){
+      panning=true; didPan=false;
+      startX=e.touches[0].clientX; startY=e.touches[0].clientY;
+      sv={x:v.x,y:v.y,w:v.w,h:v.h};
+    }
+  },{passive:false});
+
+  svg.addEventListener("touchmove",function(e){
+    e.preventDefault();
+    if(pinching && e.touches.length===2){
+      var dist=getTouchDist(e);
+      var center=getTouchCenter(e);
+      var p=clientToView(center.x, center.y);
+      var factor=dist/lastPinchDist;
+      zoomAt(p.x, p.y, factor);
+      lastPinchDist=dist;
+    } else if(panning && !pinching && e.touches.length===1){
+      var r=svg.getBoundingClientRect();
+      var dx=(e.touches[0].clientX-startX)/r.width*sv.w;
+      var dy=(e.touches[0].clientY-startY)/r.height*sv.h;
+      if(Math.abs(e.touches[0].clientX-startX)+Math.abs(e.touches[0].clientY-startY)>8) didPan=true;
+      if(didPan){
+        v.x=sv.x-dx; v.y=sv.y-dy; v.w=sv.w; v.h=sv.h;
+        clampView(); applyView();
+      }
+    }
+  },{passive:false});
+
+  svg.addEventListener("touchend",function(e){
+    if(e.touches.length<2) pinching=false;
+    if(e.touches.length===0) panning=false;
+  });
+
+  // 滑鼠拖曳平移（桌面）
+  svg.addEventListener("pointerdown",function(e){
+    if(e.pointerType==="touch") return; // 觸控由 touch 事件處理
+    if(e.button!=null && e.button!==0) return;
+    panning=true; didPan=false; startX=e.clientX; startY=e.clientY;
+    sv={x:v.x,y:v.y,w:v.w,h:v.h};
+  });
+  window.addEventListener("pointermove",function(e){
+    if(!panning || e.pointerType==="touch") return;
+    var r=svg.getBoundingClientRect();
+    var dx=(e.clientX-startX)/r.width*sv.w;
+    var dy=(e.clientY-startY)/r.height*sv.h;
+    if(Math.abs(e.clientX-startX)+Math.abs(e.clientY-startY)>5) didPan=true;
+    if(didPan){
+      v.x=sv.x-dx; v.y=sv.y-dy; v.w=sv.w; v.h=sv.h;
+      clampView(); applyView();
+    }
+  });
+  window.addEventListener("pointerup",function(e){
+    if(e.pointerType==="touch") return;
+    panning=false;
+  });
+
+  // 阻止 SVG 區域的頁面滾動（iOS Safari 下拉刷新等）
+  document.getElementById("svgBox").addEventListener("touchmove",function(e){
+    e.preventDefault();
+  },{passive:false});
+
+  // ── 綁定 ──
+  function init(){
+    var sel=document.getElementById("level");
+    Object.keys(LEVELS).forEach(function(k){
+      var o=document.createElement("option");o.value=k;o.textContent=LEVELS[k].label;
+      sel.appendChild(o);
+    });
+    sel.value=state.level;
+    sel.addEventListener("change",function(){
+      state.level=this.value;
+      state.counts={};
+      closePopup();
+      if(state.level==="smallest") setView({x:95,y:95,w:110,h:110});
+      else setView(BASE);
+      renderCells(); recalc();
+    });
+
+    document.getElementById("dilution").addEventListener("input",function(){
+      state.dilution=this.value===""?0:Number(this.value);recalc();
+    });
+    document.getElementById("depth").addEventListener("input",function(){
+      state.depth=this.value===""?0:Number(this.value);recalc();
+    });
+    document.getElementById("clearBtn").addEventListener("click",function(){
+      if(!confirm("確定要清除所有計數嗎？")) return;
+      state.counts={}; closePopup(); renderCells(); recalc();
+    });
+    document.getElementById("csvBtn").addEventListener("click",exportCSV);
+    document.getElementById("importBtn").addEventListener("click",function(){
+      document.getElementById("csvFile").click();
+    });
+    document.getElementById("csvFile").addEventListener("change",function(){
+      if(this.files && this.files[0]) importCSV(this.files[0]);
+      this.value="";
+    });
+
+    renderStatic();
+    renderCells();
+    recalc();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
