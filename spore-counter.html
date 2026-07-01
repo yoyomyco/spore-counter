@@ -6,12 +6,13 @@
 <title>孢子計數器</title>
 
 <!-- PWA / iOS 加入主畫面 -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#f8fafc" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="孢子計數" />
 <meta name="mobile-web-app-capable" content="yes" />
-<meta name="theme-color" content="#f8fafc" />
-<link rel="apple-touch-icon" href="icon.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 
 <style>
   :root{
@@ -203,25 +204,6 @@
 <script>
 (function(){
   "use strict";
-
-  // ── PWA manifest ──
-  (function setupPWA(){
-    try{
-      var manifest={
-        name:"血球計數器孢子濃度計算工具",
-        short_name:"孢子計數",
-        start_url:location.href,
-        display:"standalone",
-        background_color:"#f8fafc",
-        theme_color:"#f8fafc",
-        icons:[{src:"icon.png", sizes:"180x180", type:"image/png"}]
-      };
-      var blob=new Blob([JSON.stringify(manifest)],{type:"application/json"});
-      var link=document.createElement("link");
-      link.rel="manifest"; link.href=URL.createObjectURL(blob);
-      document.head.appendChild(link);
-    }catch(e){}
-  })();
 
   // ── 計數層級 ──
   var LEVELS = {
@@ -572,6 +554,15 @@
   }
   init();
 })();
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function (err) {
+        console.warn('SW 註冊失敗:', err);
+      });
+    });
+  }
 </script>
 </body>
 </html>
